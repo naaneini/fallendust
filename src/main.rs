@@ -1,6 +1,8 @@
+use std::path::Path;
+
 use camera_controller::CameraController;
-use ferrousgl::{GlWindow, WindowConfig};
-use glam::Vec4;
+use ferrousgl::{GlWindow, Mesh, Shader, WindowConfig};
+use glam::{Mat4, Vec3, Vec4, IVec3};
 use terrain::terrain_manager::TerrainManager;
 
 mod terrain;
@@ -13,21 +15,60 @@ fn main() {
             width: 1080,
             height: 720,
             target_framerate: 144,
+            anti_aliasing: 4,
             ..Default::default()
         }
     );
 
-    let camera_controller = CameraController::new();
+    let mut camera_controller = CameraController::new((window.get_window_size().0 as f32) / (window.get_window_size().1 as f32));
     let mut terrain_manager = TerrainManager::new();
 
+    terrain_manager.generate_chunk(
+        IVec3::new(0, 0, 0),
+        123456789,
+        0.5,
+    );
+    terrain_manager.generate_chunk(
+        IVec3::new(0, -1, 0),
+        123456789,
+        0.5,
+    );
+    terrain_manager.generate_chunk(
+        IVec3::new(-1, 0, 0),
+        123456789,
+        0.5,
+    );
+    terrain_manager.generate_chunk(
+        IVec3::new(-1, -1, 0),
+        123456789,
+        0.5,
+    );
+
     while !window.should_window_close() {
-        window.clear_color(Vec4::new(0.0, 0.0, 0.0, 1.0));
+        window.clear_color(Vec4::new(0.4, 0.4, 0.9, 1.0));
         window.clear_depth();
-        let title = format!("Fallendust (x64_win_shipping, {}/{})", window.get_frame_time(), 1000.0/144.0);
+
+        let vp = camera_controller.get_vp();
+        camera_controller.update(&mut window);
+
+        terrain_manager.render(&mut window, vp);
+
+        let title = format!(
+            "Fallendust x64_win_debug_build, FT Budget {}µs [{:.1}%], cam_pos:[{}] gl_ver[{}], gl_vendor[{}], accelerator device(discrete/integrated)[{}]",
+            window.get_frame_time(),
+            (window.get_frame_time() as f64 / ((1.0 / 144.0) * 1_000_000.0)) * 100.0,
+            camera_controller.position,
+            unsafe {
+                window.get_opengl_ver() + &window.get_glsl_ver()
+            },
+            unsafe {
+                window.get_vendor()
+            },
+            unsafe {
+                window.get_renderer()
+            }
+        );
         window.set_window_title(&title);
-
-        terrain_manager.render_terrain();
-
         window.update();
     }
 }
