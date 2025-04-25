@@ -23,26 +23,10 @@ fn main() {
     let mut camera_controller = CameraController::new((window.get_window_size().0 as f32) / (window.get_window_size().1 as f32));
     let mut terrain_manager = TerrainManager::new();
 
-    terrain_manager.generate_chunk(
-        IVec3::new(0, 0, 0),
-        123456789,
-        0.5,
-    );
-    terrain_manager.generate_chunk(
-        IVec3::new(0, -1, 0),
-        123456789,
-        0.5,
-    );
-    terrain_manager.generate_chunk(
-        IVec3::new(-1, 0, 0),
-        123456789,
-        0.5,
-    );
-    terrain_manager.generate_chunk(
-        IVec3::new(-1, -1, 0),
-        123456789,
-        0.5,
-    );
+    let seed = 123456789;
+    let frequency = 0.5;    
+
+    terrain_manager.enqueue_chunks_in_radius(IVec3::new(0, 0, 0), 8);
 
     while !window.should_window_close() {
         window.clear_color(Vec4::new(0.4, 0.4, 0.9, 1.0));
@@ -50,6 +34,9 @@ fn main() {
 
         let vp = camera_controller.get_vp();
         camera_controller.update(&mut window);
+
+        // Process one chunk per frame
+        terrain_manager.process_chunk_generation(69420, 0.5);
 
         terrain_manager.render(&mut window, vp);
 

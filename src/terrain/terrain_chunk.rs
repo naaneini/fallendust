@@ -34,10 +34,7 @@ impl TerrainChunk {
 
         mesh.update_vertices(&vertices);
         mesh.update_indices(&indices);
-
-        println!("Indices: {:?}", indices.len());
-        println!("Vertices: {:?}", vertices.len());
-
+        
         TerrainChunk { position, mesh }
     }
 

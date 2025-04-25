@@ -15,7 +15,7 @@ void main()
     vec3 normal = normalize(vNormal);
     
     // Calculate how "up-facing" the normal is (0 = side, 1 = top)
-    float topBlend = smoothstep(0.6, 0.9, -normal.y);
+    float topBlend = smoothstep(0.8, 0.9, -normal.y);
     
     // Tri-planar mapping for stone texture
     vec3 blending = abs(normal);
@@ -36,7 +36,7 @@ void main()
     vec4 stoneColor = stoneX * blending.x + stoneY * blending.y + stoneZ * blending.z;
     
     // Sample grass texture (only on top)
-    vec2 grassUV = vWorldPos.xz * 0.5;
+    vec2 grassUV = vWorldPos.xz * 0.2;
     vec4 grassColor = texture(uGrassTex, grassUV);
     
     // Blend based on normal direction
