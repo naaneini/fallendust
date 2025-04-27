@@ -1,6 +1,7 @@
 use glam::IVec3;
 use noise::{core::perlin, NoiseFn, Perlin};
-use rayon::prelude::*; // Import rayon's parallel iterator traits
+use rayon::prelude::*;
+use serde::de; // Import rayon's parallel iterator traits
 
 use super::scalar_data::ScalarData;
 
@@ -9,9 +10,9 @@ pub struct ScalarGenerator;
 impl ScalarGenerator {
     pub fn generate(position: IVec3, seed: u32, mut chunk_size: u16) -> ScalarData {
         let perlin = Perlin::new(seed);
-        let secondary_perlin = Perlin::new(seed.wrapping_add(1)); // Secondary noise layer
-        let large_scale_perlin = Perlin::new(seed.wrapping_add(2)); // Large-scale 2D noise layer
-        let fourth_perlin = Perlin::new(seed.wrapping_add(3)); // 4th noise layer
+        let perlin2 = Perlin::new(seed);
+        let perlin3 = Perlin::new(seed);
+        let perlin4 = Perlin::new(seed);
 
         chunk_size = chunk_size + 1;
 
@@ -32,11 +33,15 @@ impl ScalarGenerator {
 
                         let grid_point = [world_x as f32, world_y as f32, world_z as f32];
                         
-                        let small_details = perlin.get([world_x * 0.05, world_y * 0.05, world_z * 0.05]) as f32;
-                        let small_detail_noise = secondary_perlin.get([world_x * 0.01, world_y * 0.000001, world_z * 0.01]) as f32;
-                        let large_noise = large_scale_perlin.get([world_x * 0.005, world_y * 0.000001, world_z * 0.005]) as f32;
+                        let noise1 = perlin.get([world_x * 0.01, world_y * 0.00001, world_z * 0.01]);
+                        let noise2 = perlin.get([world_x * 0.03, world_y * 0.03, world_z * 0.03]);
+                        let mut detail_noise = perlin2.get([world_x * 0.1, world_y * 0.1, world_z * 0.1]);
+                        detail_noise = (detail_noise * 0.5) + 0.5;
+                        let mut detail_noise2 = perlin3.get([world_x * 0.01, world_y * 0.001, world_z * 0.01]);
+                        detail_noise2 = (detail_noise2 * 0.5) + 0.5;
 
-                        let value = ((large_noise*10.0) - (small_details*((0.5 + small_detail_noise) / 2.0))) - world_y as f32 * 0.1;
+                        let value = ((noise2 as f32 + noise1 as f32 * 5.0) + ((detail_noise * detail_noise2) as f32 * 1.25)) - world_y as f32 * 0.1;
+                        //(noise2 as f32 + noise1 as f32 * 5.0) + 
 
                         (grid_point, value)
                     })

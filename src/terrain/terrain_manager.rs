@@ -26,8 +26,10 @@ impl TerrainManager {
         ).unwrap();
 
         let textures = vec![
-            Texture::new_from_file(Path::new("./assets/media/textures/grass.jpg")).unwrap(),
-            Texture::new_from_file(Path::new("./assets/media/textures/stone.jpg")).unwrap(),
+            Texture::new_from_file(Path::new("./assets/media/textures/grass.png")).unwrap(),
+            Texture::new_from_file(Path::new("./assets/media/textures/grass_normal.png")).unwrap(),
+            Texture::new_from_file(Path::new("./assets/media/textures/rock.png")).unwrap(),
+            Texture::new_from_file(Path::new("./assets/media/textures/rock_normal.png")).unwrap(),
         ];
         for texture in &textures {
             texture.bind(0);
@@ -91,11 +93,15 @@ impl TerrainManager {
     pub fn render(&mut self, window: &mut GlWindow, vp: Mat4) {
         self.textures[0].bind(0); // Bind the first texture to texture unit 0
         self.textures[1].bind(1);
+        self.textures[2].bind(2);
+        self.textures[3].bind(3);
 
         self.terrain_shader.bind_program();
         self.terrain_shader.set_uniform_3f("uLightDir", -0.8, 1.0, 0.5);
         self.terrain_shader.set_uniform_texture("uGrassTex", 0);
-        self.terrain_shader.set_uniform_texture("uStoneTex", 1);
+        self.terrain_shader.set_uniform_texture("uGrassNormal", 1);
+        self.terrain_shader.set_uniform_texture("uRockTex", 2);
+        self.terrain_shader.set_uniform_texture("uRockNormal",3);
 
         //window.set_rendering_type(ferrousgl::RenderingType::Wireframe);
 

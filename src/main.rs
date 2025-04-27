@@ -26,7 +26,7 @@ fn main() {
     let seed = 123456789;
     let frequency = 0.5;    
 
-    terrain_manager.enqueue_chunks_in_radius(IVec3::new(0, 0, 0), 8);
+    terrain_manager.enqueue_chunks_in_radius(IVec3::new(0, 0, 0), 4);
 
     while !window.should_window_close() {
         window.clear_color(Vec4::new(0.4, 0.4, 0.9, 1.0));

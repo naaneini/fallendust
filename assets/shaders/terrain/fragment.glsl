@@ -4,51 +4,70 @@ in vec3 vNormal;
 in vec3 vWorldPos;
 
 uniform sampler2D uGrassTex;
-uniform sampler2D uStoneTex;
-uniform vec3 uLightDir; // Should be normalized (direction from surface to light)
+uniform sampler2D uGrassNormal;
+uniform sampler2D uRockTex;
+uniform sampler2D uRockNormal;
+uniform vec3 uLightDir; // Normalized (direction from surface to light)
+uniform float uNormalStrength = 1.0;
 
 out vec4 FragColor;
 
+// Perturb normal with normal map
+vec3 perturbNormal(vec3 normal, vec3 normalSample) {
+    vec3 normalTex = normalize(normalSample * 2.0 - 1.0);
+    normalTex = mix(vec3(0.0, 0.0, 1.0), normalTex, uNormalStrength);
+    return normalize(normal + normalTex);
+}
+
 void main()
 {
-    // Normalize the normal (interpolation can make it not unit length)
+    // --- Chunk-Aligned Tiling Parameters ---
+    const float CHUNK_SIZE = 64.0;       // Chunk size in world units
+    const float ROCK_TILE_SCALE = 8.0;   // Rock texture repeats every 8 units (64/8 = 8 tiles per chunk)
+    const float GRASS_TILE_SCALE = 4.0;  // Grass texture repeats every 4 units (64/4 = 16 tiles per chunk)
+
+    // --- Normalize Interpolated Normal ---
     vec3 normal = normalize(vNormal);
     
-    // Calculate how "up-facing" the normal is (0 = side, 1 = top)
-    float topBlend = smoothstep(0.8, 0.9, -normal.y);
+    // --- Blend Factors (Top vs. Sides) ---
+    float upFactor = -normal.y; // 1=up, -1=down
+    float topBlend = smoothstep(0.7, 0.9, upFactor);
     
-    // Tri-planar mapping for stone texture
+    // --- Tri-Planar Blending (Favor Y-Axis) ---
     vec3 blending = abs(normal);
-    blending = normalize(max(blending, 0.00001)); // Ensure weights don't get zero
-    float b = (blending.x + blending.y + blending.z);
-    blending /= vec3(b, b, b);
+    blending.y *= 4.0;          // Boost top projection influence
+    blending = normalize(max(blending, 0.00001));
+
+    // --- Rock Texture Sampling (Chunk-Aligned UVs) ---
+    vec2 RockUVX = mod(vWorldPos.zy, CHUNK_SIZE) / ROCK_TILE_SCALE;
+    vec2 RockUVY = mod(vWorldPos.xz, CHUNK_SIZE) / ROCK_TILE_SCALE; // Dominant top projection
+    vec2 RockUVZ = mod(vWorldPos.xy, CHUNK_SIZE) / ROCK_TILE_SCALE;
     
-    // Sample stone texture from three projections
-    vec2 stoneUVX = vWorldPos.zy * 0.1; // X-facing plane
-    vec2 stoneUVY = vWorldPos.xz * 0.1; // Y-facing plane (top/bottom)
-    vec2 stoneUVZ = vWorldPos.xy * 0.1; // Z-facing plane
+    vec4 RockX = texture(uRockTex, RockUVX);
+    vec4 RockY = texture(uRockTex, RockUVY);
+    vec4 RockZ = texture(uRockTex, RockUVZ);
+    vec4 RockColor = RockX * blending.x + RockY * blending.y + RockZ * blending.z;
     
-    vec4 stoneX = texture(uStoneTex, stoneUVX);
-    vec4 stoneY = texture(uStoneTex, stoneUVY);
-    vec4 stoneZ = texture(uStoneTex, stoneUVZ);
-    
-    // Blend the stone textures based on normal direction
-    vec4 stoneColor = stoneX * blending.x + stoneY * blending.y + stoneZ * blending.z;
-    
-    // Sample grass texture (only on top)
-    vec2 grassUV = vWorldPos.xz * 0.2;
+    // --- Rock Normal Mapping ---
+    vec3 RockNormalX = texture(uRockNormal, RockUVX).xyz;
+    vec3 RockNormalY = texture(uRockNormal, RockUVY).xyz;
+    vec3 RockNormalZ = texture(uRockNormal, RockUVZ).xyz;
+    vec3 RockNormalTex = RockNormalX * blending.x + RockNormalY * blending.y + RockNormalZ * blending.z;
+
+    // --- Grass Texture Sampling (Chunk-Aligned UVs) ---
+    vec2 grassUV = mod(vWorldPos.xz, CHUNK_SIZE) / GRASS_TILE_SCALE;
     vec4 grassColor = texture(uGrassTex, grassUV);
-    
-    // Blend based on normal direction
-    vec4 finalColor = mix(stoneColor, grassColor, topBlend);
-    
-    // Simple diffuse lighting (lambertian)
-    float diffuse = max(dot(normal, -uLightDir), 0.0);
-    
-    // Add some ambient light so shadows aren't completely black
+    vec3 grassNormalTex = texture(uGrassNormal, grassUV).xyz;
+
+    // --- Final Blending (Rock vs. Grass) ---
+    vec4 finalColor = mix(RockColor, grassColor, topBlend);
+    vec3 finalNormalTex = mix(RockNormalTex, grassNormalTex, topBlend);
+    vec3 finalNormal = perturbNormal(normal, finalNormalTex);
+
+    // --- Lighting Calculation ---
+    float diffuse = max(dot(finalNormal, -uLightDir), 0.0);
     float ambient = 0.2;
     float lighting = ambient + (1.0 - ambient) * diffuse;
     
-    // Apply lighting to the final color
     FragColor = finalColor * lighting;
 }
