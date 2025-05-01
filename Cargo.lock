@@ -261,6 +261,7 @@ dependencies = [
  "ferrousgl",
  "gl",
  "glam",
+ "glfw",
  "noise",
  "rayon",
  "serde",

@@ -7,6 +7,7 @@ uniform mat4 uMVP;
 
 out vec3 vNormal;
 out vec3 vWorldPos; // Pass world position for texture mapping
+out vec4 FragPosLightSpace;
 
 void main()
 {

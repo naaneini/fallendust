@@ -1,5 +1,6 @@
 use ferrousgl::{GlWindow, WindowKey};
 use glam::{Mat4, Vec3};
+use crate::utils::ray::Ray;
 
 pub struct CameraController {
     pub position: Vec3,
@@ -117,5 +118,19 @@ impl CameraController {
         let projection = Mat4::perspective_rh_gl(self.fov.to_radians(), self.aspect_ratio, self.near, self.far);
         let view = Mat4::look_at_rh(self.position, self.target, self.up);
         projection * view
+    }
+
+    /// Generates a ray from the camera's position in the direction it is facing.
+    pub fn get_ray(&self) -> Ray {
+        // Calculate the forward vector based on yaw and pitch
+        let forward = Vec3::new(
+            self.yaw.to_radians().cos() * self.pitch.to_radians().cos(),
+            self.pitch.to_radians().sin(),
+            self.yaw.to_radians().sin() * self.pitch.to_radians().cos(),
+        )
+        .normalize();
+
+        // Create and return the ray
+        Ray::new(self.position, forward)
     }
 }

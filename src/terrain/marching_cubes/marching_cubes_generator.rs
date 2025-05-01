@@ -1,10 +1,10 @@
 use crate::terrain::marching_cubes::marching_cubes_data_tables::MarchingCubesDataTables;
 use crate::terrain::scalar::scalar_data::ScalarData;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::HashMap;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use std::{collections::HashMap, time::Instant};
 
 #[derive(Hash, Eq, PartialEq)]
-struct VertexKey(usize, usize, usize, u8);
+struct VertexKey(usize, usize, usize, u8, usize); // Add LOD as part of the key
 
 pub struct MarchingCubesGenerator;
 
@@ -13,7 +13,10 @@ impl MarchingCubesGenerator {
         data_tables: MarchingCubesDataTables,
         scalar_data: ScalarData,
         isolevel: f32,
+        lod: usize,
     ) -> (Vec<f32>, Vec<u32>) {
+        // LOD must be at least 1 (no skipping)
+        let lod = lod.max(1);
         let grid_size = scalar_data.dimensions.0;
         let values = &scalar_data.values;
 
@@ -28,7 +31,9 @@ impl MarchingCubesGenerator {
         // Process slices in parallel
         let slices: Vec<(usize, Vec<f32>, Vec<u32>)> = (1..grid_size - 2)
             .into_par_iter()
-            .map(|x| Self::process_slice(x, &data_tables, &scalar_data, isolevel))
+            .step_by(lod) // Skip slices based on LOD
+            .filter(|&x| x + lod < grid_size - 1) // Ensure overlap between slices
+            .map(|x| Self::process_slice(x, &data_tables, &scalar_data, isolevel, lod))
             .collect();
 
         // Merge results in order
@@ -53,6 +58,7 @@ impl MarchingCubesGenerator {
         data_tables: &MarchingCubesDataTables,
         scalar_data: &ScalarData,
         isolevel: f32,
+        lod: usize,
     ) -> (usize, Vec<f32>, Vec<u32>) {
         let grid_size = scalar_data.dimensions.0;
         let values = &scalar_data.values;
@@ -63,15 +69,22 @@ impl MarchingCubesGenerator {
         let mut vertex_cache = HashMap::new();
         let mut corner_values = [0.0; 8];
 
-        for y in 1..grid_size - 2 {
-            for z in 1..grid_size - 2 {
+        for y in (1..grid_size - 2).step_by(lod) {
+            for z in (1..grid_size - 2).step_by(lod) {
                 let mut cube_index = 0;
 
                 // Compute corner values and determine cube index
                 for i in 0..8 {
-                    let corner_x = x + (i & 1);
-                    let corner_y = y + ((i >> 1) & 1);
-                    let corner_z = z + ((i >> 2) & 1);
+                    let corner_x = x + (i & 1) * lod;
+                    let corner_y = y + ((i >> 1) & 1) * lod;
+                    let corner_z = z + ((i >> 2) & 1) * lod;
+                    
+                    // Ensure we don't go out of bounds
+                    if corner_x >= grid_size || corner_y >= grid_size || corner_z >= grid_size {
+                        corner_values[i] = 0.0;
+                        continue;
+                    }
+                    
                     let index = corner_x * grid_size * grid_size + corner_y * grid_size + corner_z;
                     corner_values[i] = values[index];
                     if corner_values[i] < isolevel {
@@ -97,10 +110,11 @@ impl MarchingCubesGenerator {
                             corner_values[v2 as usize],
                             isolevel,
                             scalar_data,
+                            lod,
                         );
 
                         // Create key for vertex cache
-                        let key = VertexKey(x, y, z, i as u8);
+                        let key = VertexKey(x / lod, y / lod, z / lod, i as u8, lod); // Include LOD in the key
 
                         // Check if vertex already exists
                         cube_vertices[i] = match vertex_cache.get(&key) {
@@ -139,11 +153,16 @@ impl MarchingCubesGenerator {
         value2: f32,
         isolevel: f32,
         scalar_data: &ScalarData,
+        lod: usize,
     ) -> ([f32; 3], [f32; 3]) {
-        let t = (isolevel - value1) / (value2 - value1);
+        let t = if (value2 - value1).abs() > f32::EPSILON {
+            (isolevel - value1) / (value2 - value1 + f32::EPSILON)
+        } else {
+            0.5
+        };
 
-        let position1 = Self::corner_position(v1, x, y, z);
-        let position2 = Self::corner_position(v2, x, y, z);
+        let position1 = Self::corner_position(v1, x, y, z, lod);
+        let position2 = Self::corner_position(v2, x, y, z, lod);
 
         let pos = [
             position1[0] + t * (position2[0] - position1[0]),
@@ -163,11 +182,11 @@ impl MarchingCubesGenerator {
         (pos, normal)
     }
 
-    fn corner_position(corner: usize, x: usize, y: usize, z: usize) -> [f32; 3] {
+    fn corner_position(corner: usize, x: usize, y: usize, z: usize, lod: usize) -> [f32; 3] {
         [
-            (x + (corner & 1)) as f32,
-            (y + ((corner >> 1) & 1)) as f32,
-            (z + ((corner >> 2) & 1)) as f32,
+            (x + (corner & 1) * lod) as f32,
+            (y + ((corner >> 1) & 1) * lod) as f32,
+            (z + ((corner >> 2) & 1) * lod) as f32,
         ]
     }
 
@@ -181,7 +200,11 @@ impl MarchingCubesGenerator {
 
         // Helper function to get value at grid point
         let get_value = |x, y, z| {
-            values[x * grid_size * grid_size + y * grid_size + z]
+            if x < grid_size && y < grid_size && z < grid_size {
+                values[x * grid_size * grid_size + y * grid_size + z]
+            } else {
+                0.0
+            }
         };
 
         // Calculate derivatives using central differences
@@ -205,7 +228,7 @@ impl MarchingCubesGenerator {
 
         // Normalize
         let length = (dx * dx + dy * dy + dz * dz).sqrt();
-        if length != 0.0 {
+        if length > 1e-6 {
             [dx / length, dy / length, dz / length]
         } else {
             [0.0, 0.0, 0.0]
