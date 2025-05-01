@@ -1,1 +1,0 @@
-// This file contains utility functions and types related to raycasting, which may be used for terrain interaction.
