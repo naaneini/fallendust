@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 use ferrousgl::{texture, GlWindow, MipmapType, Shader, Texture};
 use glam::{IVec3, Mat4, Vec3, Vec4};
+use serde_json::de;
 use crate::utils::ray::Ray; // Ensure Ray is imported
 
 use super::terrain_chunk::TerrainChunk;
@@ -18,6 +19,9 @@ pub struct TerrainManager {
     chunk_generation_queue: VecDeque<IVec3>, // Queue for chunk positions to generate
     seed: u32,
     isolevel: f32,
+    last_chunk_position: IVec3,
+    last_local_position: IVec3,
+    chunks_to_remesh: HashSet<IVec3>,
 }
 
 impl TerrainManager {
@@ -49,6 +53,9 @@ impl TerrainManager {
             chunk_generation_queue: VecDeque::new(),
             seed: 0,
             isolevel: 0.5,
+            last_chunk_position: IVec3::new(0, 0, 0),
+            last_local_position: IVec3::new(0, 0, 0),
+            chunks_to_remesh: HashSet::new(),
         }
     }
 
@@ -66,7 +73,7 @@ impl TerrainManager {
         
         // Determine LOD level based on distance
         // You can adjust these thresholds as needed
-        let lod_level = if distance < 2.0 {
+        let mut lod_level = if distance < 2.0 {
             1 // Highest detail close to origin
         } else if distance < 5.0 {
             2
@@ -75,6 +82,7 @@ impl TerrainManager {
         } else {
             8
         };
+        lod_level = 1;
         
         let chunk = TerrainChunk::generate(
             position,
@@ -172,57 +180,144 @@ impl TerrainManager {
         self.chunks.get_mut(&chunk_position)
     }
     
-    pub fn place_sphere(&mut self, center: Vec3, radius: f32) {
-        // Track which chunks need remeshing
-        let mut chunks_to_remesh = HashSet::new();
-        
-        // Calculate the bounding box of the sphere
-        let min_x = (center.x - radius).floor() as i32;
-        let max_x = (center.x + radius).ceil() as i32;
-        let min_y = (center.y - radius).floor() as i32;
-        let max_y = (center.y + radius).ceil() as i32;
-        let min_z = (center.z - radius).floor() as i32;
-        let max_z = (center.z + radius).ceil() as i32;
+    pub fn create_sphere(&mut self, center: Vec3, radius: f32) {
+        let radius_sq = radius * radius;
+        let min = (center - Vec3::splat(radius)).floor();
+        let max = (center + Vec3::splat(radius)).ceil();
     
-        let chunk_size = self.chunk_size as f32;
-        
-        // First pass: modify all voxels with smooth values
-        for x in min_x..=max_x {
-            for y in min_y..=max_y {
-                for z in min_z..=max_z {
+        for x in (min.x as i32)..=(max.x as i32) {
+            for y in (min.y as i32)..=(max.y as i32) {
+                for z in (min.z as i32)..=(max.z as i32) {
                     let pos = Vec3::new(x as f32, y as f32, z as f32);
-                    let distance = pos.distance(center);
-                    
-                    // Calculate a smooth value based on distance from sphere surface
-                    // This creates a smooth transition at the edges
-                    let value = if distance < radius - 1.0 {
-                        // Inside the sphere (with 1 unit margin)
-                        1.0
-                    } else if distance > radius + 1.0 {
-                        // Outside the sphere (with 1 unit margin)
-                        0.0
-                    } else {
-                        // In the transition zone (1 unit thick)
-                        // Smoothly interpolate between 1 and 0
-                        0.5 - (distance - radius) * 0.5
-                    };
+                    let offset = pos - center;
+                    let distance_sq = offset.length_squared();
     
-                    if value > 0.0 {
-                        if let Some(chunk) = self.get_chunk_for_voxel(pos) {
-                            let local_position = IVec3::new(
-                                (pos.z.rem_euclid(chunk_size as f32)) as i32,
-                                (pos.y.rem_euclid(chunk_size as f32)) as i32,
-                                (pos.x.rem_euclid(chunk_size as f32)) as i32,
-                            );
-                            chunk.modify_terrain(local_position, value);
-                            chunks_to_remesh.insert(chunk.position);
-                        }
+                    if distance_sq > radius_sq {
+                        continue; // Skip points outside the sphere
                     }
+    
+                    let distance = distance_sq.sqrt();
+                    let normalized_dist = distance / radius;
+    
+                    // Smooth cubic falloff (1.0 at center, 0.0 at radius)
+                    let mut delta = 1.0 - 3.0 * normalized_dist.powi(2) + 2.0 * normalized_dist.powi(3);
+    
+                    // Clamp delta to ensure it's not negative
+                    delta = delta.max(0.0);
+    
+                    self.place_voxel(pos, delta);
                 }
             }
         }
         
-        // Second pass: remesh affected chunks
+        self. remesh_all_chunks();
+    }
+
+    pub fn place_voxel(&mut self, position: Vec3, delta: f32) {
+        // Track which chunks need remeshing
+        let mut chunks_to_remesh = HashSet::new();
+    
+        let chunk_size = self.chunk_size as usize;
+    
+        // Extract the values we need before any mutable borrows
+        let mut last_chunk_position = self.last_chunk_position.clone();
+        let mut last_local_position = self.last_local_position.clone();
+    
+        let target_position = position; // Use a mutable copy
+    
+        let mut local_position = IVec3::new(
+            (position.z.rem_euclid(chunk_size as f32)) as i32,
+            (position.y.rem_euclid(chunk_size as f32)) as i32,
+            (position.x.rem_euclid(chunk_size as f32)) as i32,
+        );
+
+        let mut chunk_position = IVec3::new(
+            (position.x / self.chunk_size as f32).floor() as i32,
+            (position.y / self.chunk_size as f32).floor() as i32,
+            (position.z / self.chunk_size as f32).floor() as i32,
+        );
+
+        if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+            let is_different = chunk.position != last_chunk_position || last_local_position != local_position;
+            if is_different {
+
+            }
+    
+            last_chunk_position = chunk.position;
+            last_local_position = local_position;
+    
+            chunk.modify_terrain(local_position, delta); // Full density value
+            chunks_to_remesh.insert(chunk.position);
+        }
+    
+        // Check if any coordinate is zero
+       // println!("Local position:     {:?}", local_position);
+        if local_position.z == 0 {
+            chunk_position.x -= 1;
+            local_position.z = 32 as i32;
+        }
+        if local_position.y == 0 {
+            chunk_position.y -= 1;
+            local_position.y = 32 as i32;
+        }
+        if local_position.x == 0 {
+            chunk_position.z -= 1;
+            local_position.x = 32 as i32;
+        }
+
+        if local_position.z == 1 {
+            chunk_position.x -= 1;
+            local_position.z = 33 as i32;
+        }
+        if local_position.y == 1 {
+            chunk_position.y -= 1;
+            local_position.y = 33 as i32;
+        }
+        if local_position.x == 1 {
+            chunk_position.z -= 1;
+            local_position.x = 33 as i32;
+        }
+
+        if local_position.z == 2 {
+            chunk_position.x -= 1;
+            local_position.z = 34 as i32;
+        }
+        if local_position.y == 2 {
+            chunk_position.y -= 1;
+            local_position.y = 34 as i32;
+        }
+        if local_position.x == 2 {
+            chunk_position.z -= 1;
+            local_position.x = 34 as i32;
+        }
+        //println!("Local position new: {:?}", local_position);
+        //println!("Target position:    {:?}", target_position);
+    
+        if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+            let is_different = chunk.position != last_chunk_position || last_local_position != local_position;
+            if is_different {
+
+            }
+    
+            last_chunk_position = chunk.position;
+            last_local_position = local_position;
+    
+            chunk.modify_terrain(local_position, delta); // Full density value
+            chunks_to_remesh.insert(chunk.position);
+        }
+        self.last_chunk_position = last_chunk_position;
+        self.last_local_position = last_local_position;
+    
+        // Remesh affected chunks
+        for chunk_pos in chunks_to_remesh {
+            self.chunks_to_remesh.insert(chunk_pos);
+        }
+    }
+
+    pub fn remesh_all_chunks(&mut self) {
+        let chunks_to_remesh = self.chunks_to_remesh.clone();
+        self.chunks_to_remesh.clear();
+    
         for chunk_pos in chunks_to_remesh {
             if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
                 chunk.remesh_chunk(&self.data_tables, self.isolevel, 1);
@@ -230,49 +325,72 @@ impl TerrainManager {
         }
     }
 
-    pub fn modify_terrain_with_raycast(&mut self, ray: Ray, max_distance: f32, radius: f32, add: bool) {
-        let mut distance = 0.0;
-        let step = 0.1; // Step size for ray traversal
-        let chunk_size = self.chunk_size as f32;
-        let isolevel = self.isolevel; // Use the isolevel from the terrain manager
+    pub fn e (&mut self) {
+        self.get_active_chunks_count();
 
-        let mut previous_value = None;
+        self.last_chunk_position = IVec3::new(0, 0, 0);
+    }
 
-        while distance < max_distance {
-            let point = ray.at(distance);
+    pub fn new_modify_terrain(&mut self, position: IVec3, delta: f32) {
+        if let Some(chunk) = self.get_chunk_for_voxel(position.as_vec3()) {
+            chunk.modify_terrain(position, delta);
+            //chunk.remesh_chunk(&self.data_tables, self.isolevel, 1);
+        }
+    }
 
-            if let Some(chunk) = self.get_chunk_for_voxel(point) {
+    pub fn place_voxel_in_chunk(&mut self, chunk_position: IVec3, local_position: IVec3, density_delta: f32) {
+        if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+            chunk.modify_terrain(local_position, density_delta);
+            chunk.remesh_chunk(&self.data_tables, self.isolevel, 1);
+        } else {
+            println!("Chunk at position {:?} does not exist.", chunk_position);
+        }
+    }
+
+    pub fn raycast(&mut self, ray: &Ray, max_distance: f32) -> Option<Vec3> {
+        let mut current_distance = 0.0;
+        let step_size = 0.01; // Adjust for desired precision
+
+        while current_distance < max_distance {
+            let current_position = ray.at(current_distance);
+            
+            // Get the chunk for the current voxel position
+            let chunk_position = IVec3::new(
+                (current_position.x / self.chunk_size as f32).floor() as i32,
+                (current_position.y / self.chunk_size as f32).floor() as i32,
+                (current_position.z / self.chunk_size as f32).floor() as i32,
+            );
+
+            if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
+                // Convert world position to local position within the chunk
                 let local_position = IVec3::new(
-                    (point.x.rem_euclid(chunk_size)) as i32,
-                    (point.y.rem_euclid(chunk_size)) as i32,
-                    (point.z.rem_euclid(chunk_size)) as i32,
+                    (current_position.x.rem_euclid(self.chunk_size as f32)) as i32,
+                    (current_position.y.rem_euclid(self.chunk_size as f32)) as i32,
+                    (current_position.z.rem_euclid(self.chunk_size as f32)) as i32,
                 );
 
-                if let Some(current_value) = chunk.scalar_data.get_mut(local_position) {
-                    if let Some(prev_value) = previous_value {
-                        // Check if we crossed the isolevel
-                        if (prev_value < isolevel && *current_value >= isolevel)
-                            || (prev_value >= isolevel && *current_value < isolevel)
-                        {
-                            // Place the modification at the border
-                            let delta = if add { 1.0 } else { -1.0 };
-                            chunk.modify_terrain(local_position, delta);
+                // Check if the local position is within the chunk bounds
+                if local_position.x >= 0 && local_position.x < self.chunk_size as i32 &&
+                   local_position.y >= 0 && local_position.y < self.chunk_size as i32 &&
+                   local_position.z >= 0 && local_position.z < self.chunk_size as i32 {
+                    
+                    // Get the density value at the local position
+                    let density = chunk.scalar_data.get_value(local_position);
 
-                            // Optionally, apply the modification to a radius
-                            if radius > 0.0 {
-                                self.place_sphere(point, radius);
-                            }
-
-                            return; // Stop after finding the border
-                        }
+                    // Check if the density is below the threshold
+                    if density > Some(0.5) {
+                        return Some(current_position);
                     }
-
-                    previous_value = Some(*current_value);
                 }
+            } else {
+                // If the chunk doesn't exist, continue the raycast without generating
+                // This avoids generating chunks just for raycasting
             }
 
-            distance += step;
+            current_distance += step_size;
         }
+
+        None // No voxel found within the max_distance
     }
 }
 

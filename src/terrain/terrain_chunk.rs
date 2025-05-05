@@ -1,3 +1,5 @@
+use std::panic::AssertUnwindSafe;
+
 use ferrousgl::Mesh;
 use glam::{IVec3, Vec3};
 
@@ -64,10 +66,7 @@ impl TerrainChunk {
         local_position: IVec3,
         delta: f32,
     ) {
-        // Modify the scalar data
-        if let Some(value) = self.scalar_data.get_mut(local_position) {
-            *value += delta;
-        }
+        self.scalar_data.set_value(local_position, delta);
     }
 
     pub fn remesh_chunk(

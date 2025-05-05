@@ -120,6 +120,14 @@ impl CameraController {
         projection * view
     }
 
+    pub fn get_view(&self) -> Mat4 {
+        Mat4::look_at_rh(self.position, self.target, self.up)
+    }
+
+    pub fn get_projection(&self) -> Mat4 {
+        Mat4::perspective_rh_gl(self.fov.to_radians(), self.aspect_ratio, self.near, self.far)
+    }
+
     /// Generates a ray from the camera's position in the direction it is facing.
     pub fn get_ray(&self) -> Ray {
         // Calculate the forward vector based on yaw and pitch

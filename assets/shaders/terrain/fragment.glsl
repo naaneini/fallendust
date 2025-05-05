@@ -1,21 +1,65 @@
 #version 330 core
+out vec4 FragColor;
 
-in vec3 vNormal;
-in vec3 vWorldPos;
+in VS_OUT {
+    vec3 FragPos;
+    vec3 Normal;
+    vec4 FragPosLightSpace;
+} fs_in;
 
 uniform sampler2D uGrassTex;
 uniform sampler2D uGrassNormal;
 uniform sampler2D uRockTex;
 uniform sampler2D uRockNormal;
-uniform vec3 uLightDir; // Normalized (direction from surface to light)
-uniform float uNormalStrength = 1.0;
 
-out vec4 FragColor;
+uniform sampler2D shadowMap;
+
+uniform vec3 lightPos;
+uniform vec3 viewPos;
+uniform vec3 lightDir;
+uniform float normalStrength = 1.0;
+
+float ShadowCalculation(vec4 fragPosLightSpace)
+{
+    // perform perspective divide
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    // transform to [0,1] range
+    projCoords = projCoords * 0.5 + 0.5;
+    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
+    float closestDepth = texture(shadowMap, projCoords.xy).r; 
+    // get depth of current fragment from light's perspective
+    float currentDepth = projCoords.z;
+    // calculate bias (based on depth map resolution and slope)
+    vec3 normal = normalize(fs_in.Normal);
+    vec3 lightDir = normalize(lightPos - fs_in.FragPos);
+    float lightDistance = length(lightPos - fs_in.FragPos);
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)) / lightDistance, 0.001);
+    // check whether current frag pos is in shadow
+    // float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
+    // PCF
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
+            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
+        }    
+    }
+    shadow /= 9.0;
+    
+    // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
+    if(projCoords.z > 1.0)
+        shadow = 0.0;
+        
+    return shadow;
+}
 
 // Perturb normal with normal map
 vec3 perturbNormal(vec3 normal, vec3 normalSample) {
     vec3 normalTex = normalize(normalSample * 2.0 - 1.0);
-    normalTex = mix(vec3(0.0, 0.0, 1.0), normalTex, uNormalStrength);
+    normalTex = mix(vec3(0.0, 0.0, 1.0), normalTex, normalStrength);
     return normalize(normal + normalTex);
 }
 
@@ -27,7 +71,7 @@ void main()
     const float GRASS_TILE_SCALE = 4.0;  // Grass texture repeats every 4 units (64/4 = 16 tiles per chunk)
 
     // --- Normalize Interpolated Normal ---
-    vec3 normal = normalize(vNormal);
+    vec3 normal = normalize(fs_in.Normal);
     
     // --- Blend Factors (Top vs. Sides) ---
     float upFactor = -normal.y; // 1=up, -1=down
@@ -39,9 +83,9 @@ void main()
     blending = normalize(max(blending, 0.00001));
 
     // --- Rock Texture Sampling (Chunk-Aligned UVs) ---
-    vec2 RockUVX = mod(vWorldPos.zy, CHUNK_SIZE) / ROCK_TILE_SCALE;
-    vec2 RockUVY = mod(vWorldPos.xz, CHUNK_SIZE) / ROCK_TILE_SCALE; // Dominant top projection
-    vec2 RockUVZ = mod(vWorldPos.xy, CHUNK_SIZE) / ROCK_TILE_SCALE;
+    vec2 RockUVX = mod(fs_in.FragPos.zy, CHUNK_SIZE) / ROCK_TILE_SCALE;
+    vec2 RockUVY = mod(fs_in.FragPos.xz, CHUNK_SIZE) / ROCK_TILE_SCALE; // Dominant top projection
+    vec2 RockUVZ = mod(fs_in.FragPos.xy, CHUNK_SIZE) / ROCK_TILE_SCALE;
     
     vec4 RockX = texture(uRockTex, RockUVX);
     vec4 RockY = texture(uRockTex, RockUVY);
@@ -55,7 +99,7 @@ void main()
     vec3 RockNormalTex = RockNormalX * blending.x + RockNormalY * blending.y + RockNormalZ * blending.z;
 
     // --- Grass Texture Sampling (Chunk-Aligned UVs) ---
-    vec2 grassUV = mod(vWorldPos.xz, CHUNK_SIZE) / GRASS_TILE_SCALE;
+    vec2 grassUV = mod(fs_in.FragPos.xz, CHUNK_SIZE) / GRASS_TILE_SCALE;
     vec4 grassColor = texture(uGrassTex, grassUV);
     vec3 grassNormalTex = texture(uGrassNormal, grassUV).xyz;
 
@@ -65,9 +109,11 @@ void main()
     vec3 finalNormal = perturbNormal(normal, finalNormalTex);
 
     // --- Lighting Calculation ---
-    float diffuse = max(dot(finalNormal, -uLightDir), 0.0);
+    float diffuse = max(dot(finalNormal, lightDir), 0.0);
     float ambient = 0.2;
     float lighting = ambient + (1.0 - ambient) * diffuse;
+
+    float shadow = ShadowCalculation(fs_in.FragPosLightSpace);                      
     
-    FragColor = finalColor * lighting;
+    FragColor = finalColor * lighting * (1.0 - shadow * 0.5);  
 }

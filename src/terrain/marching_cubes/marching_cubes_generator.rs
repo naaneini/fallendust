@@ -17,7 +17,7 @@ impl MarchingCubesGenerator {
     ) -> (Vec<f32>, Vec<u32>) {
         // LOD must be at least 1 (no skipping)
         let lod = lod.max(1);
-        let grid_size = scalar_data.dimensions.0;
+        let grid_size = scalar_data.dimensions.x as usize;
         let values = &scalar_data.values;
 
         // Early exit if all values are below threshold
@@ -60,7 +60,7 @@ impl MarchingCubesGenerator {
         isolevel: f32,
         lod: usize,
     ) -> (usize, Vec<f32>, Vec<u32>) {
-        let grid_size = scalar_data.dimensions.0;
+        let grid_size = scalar_data.dimensions.x as usize;
         let values = &scalar_data.values;
         let grid = &scalar_data.grid;
 
@@ -76,12 +76,12 @@ impl MarchingCubesGenerator {
                 // Compute corner values and determine cube index
                 for i in 0..8 {
                     let corner_x = x + (i & 1) * lod;
-                    let corner_y = y + ((i >> 1) & 1) * lod;
-                    let corner_z = z + ((i >> 2) & 1) * lod;
+                    let corner_y = y as usize + ((i >> 1) & 1) * lod;
+                    let corner_z = z as usize + ((i >> 2) & 1) * lod;
                     
                     // Ensure we don't go out of bounds
-                    if corner_x >= grid_size || corner_y >= grid_size || corner_z >= grid_size {
-                        corner_values[i] = 0.0;
+                    if corner_x >= scalar_data.dimensions.x as usize || corner_y >= scalar_data.dimensions.x as usize || corner_z >= scalar_data.dimensions.x as usize {
+                        corner_values[i] = isolevel - 1.0; // Assign a value below isolevel
                         continue;
                     }
                     
@@ -191,7 +191,7 @@ impl MarchingCubesGenerator {
     }
 
     fn calculate_normal(pos: [f32; 3], scalar_data: &ScalarData) -> [f32; 3] {
-        let grid_size = scalar_data.dimensions.0;
+        let grid_size = scalar_data.dimensions.x as usize;
         let values = &scalar_data.values;
         
         let x = pos[0].floor() as usize;
