@@ -41,11 +41,11 @@ impl TerrainManager {
         ];
         for texture in &textures {
             texture.bind(0);
-            texture.set_mipmap_type(MipmapType::Linear);
+            texture.set_mipmap_type(MipmapType::Nearest);
         }
 
         TerrainManager {
-            chunk_size: 32,
+            chunk_size: 64,
             chunks: HashMap::new(),
             data_tables,
             terrain_shader,
@@ -254,41 +254,41 @@ impl TerrainManager {
        // println!("Local position:     {:?}", local_position);
         if local_position.z == 0 {
             chunk_position.x -= 1;
-            local_position.z = 32 as i32;
+            local_position.z = 64 as i32;
         }
         if local_position.y == 0 {
             chunk_position.y -= 1;
-            local_position.y = 32 as i32;
+            local_position.y = 64 as i32;
         }
         if local_position.x == 0 {
             chunk_position.z -= 1;
-            local_position.x = 32 as i32;
+            local_position.x = 64 as i32;
         }
 
         if local_position.z == 1 {
             chunk_position.x -= 1;
-            local_position.z = 33 as i32;
+            local_position.z = 65 as i32;
         }
         if local_position.y == 1 {
             chunk_position.y -= 1;
-            local_position.y = 33 as i32;
+            local_position.y = 65 as i32;
         }
         if local_position.x == 1 {
             chunk_position.z -= 1;
-            local_position.x = 33 as i32;
+            local_position.x = 65 as i32;
         }
 
         if local_position.z == 2 {
             chunk_position.x -= 1;
-            local_position.z = 34 as i32;
+            local_position.z = 66 as i32;
         }
         if local_position.y == 2 {
             chunk_position.y -= 1;
-            local_position.y = 34 as i32;
+            local_position.y = 66 as i32;
         }
         if local_position.x == 2 {
             chunk_position.z -= 1;
-            local_position.x = 34 as i32;
+            local_position.x = 66 as i32;
         }
         //println!("Local position new: {:?}", local_position);
         //println!("Target position:    {:?}", target_position);

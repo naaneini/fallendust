@@ -35,7 +35,7 @@ impl ScalarGenerator {
 
                         let noise1 = perlin.get([world_x * 0.01, world_y * 0.01, world_z * 0.01]) as f32;
                         let noise2 = perlin2.get([world_x * 0.05, world_y * 0.05, world_z * 0.05]) as f32 * 0.5; // Different frequency and amplitude
-                        let noise3 = perlin3.get([world_x * 0.1, world_y * 0.1, world_z * 0.1]) as f32 * 0.001; // Even higher frequency, lower amplitude
+                        let noise3 = perlin3.get([world_x * 0.001, world_y * 0.00000001, world_z * 0.001]) as f32 * 0.05; // Even higher frequency, lower amplitude
                         let noise4 = perlin4.get([world_x * 0.2, world_y * 0.2, world_z * 0.2]) as f32 * 0.075; // Even higher frequency, lower amplitude
                         
                         let value = noise1 + noise2 + noise3 + noise4 - ((world_y) * 0.025) as f32;

@@ -1,7 +1,7 @@
 use std::{io::Write, path::Path};
 
 use camera_controller::CameraController;
-use ferrousgl::{DepthType, GlWindow, Mesh, RenderTexture, RenderingType, Shader, WindowConfig, WindowKey};
+use ferrousgl::{DepthType, GlWindow, Mesh, MipmapType, RenderTexture, RenderingType, Shader, WindowConfig, WindowKey};
 use glam::{vec3, IVec3, Mat4, Vec3, Vec4};
 use terrain::terrain_manager::{self, TerrainManager};
 
@@ -30,7 +30,7 @@ fn main() {
     let seed = 123456789;
     let frequency = 0.5;
 
-    terrain_manager.enqueue_chunks_in_radius(IVec3::new(0, 0, 0), 8);
+    terrain_manager.enqueue_chunks_in_radius(IVec3::new(0, 0, 0), 4);
     
     // shadow stuff
     let depth_shader = Shader::new_from_file(
@@ -38,7 +38,9 @@ fn main() {
         Path::new("./assets/shaders/shadows/fragment.glsl"),
     ).unwrap();
 
-    let depth_texture = RenderTexture::new(4096, 4096, true).unwrap();
+    let mut depth_texture = RenderTexture::new(8192, 8192, true).unwrap();
+    depth_texture.texture().bind(0);
+    depth_texture.set_mipmap_type(MipmapType::Nearest);
 
     // debug quad for depth texture
     let quad_shader = Shader::new_from_file(
@@ -195,7 +197,7 @@ fn main() {
 
         window.update_viewport(window.get_window_size().0, window.get_window_size().1);
         
-        window.clear_color(Vec4::new(0.0, 0.0, 0.0, 1.0));
+        window.clear_color(Vec4::new(0.4, 0.4, 0.9, 1.0));
         window.clear_depth();
         //window.set_depth_testing(DepthType::LessOrEqual);
         

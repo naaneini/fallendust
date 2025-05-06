@@ -25,6 +25,7 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     // transform to [0,1] range
     projCoords = projCoords * 0.5 + 0.5;
+
     // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
     float closestDepth = texture(shadowMap, projCoords.xy).r; 
     // get depth of current fragment from light's perspective
@@ -33,21 +34,27 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     vec3 normal = normalize(fs_in.Normal);
     vec3 lightDir = normalize(lightPos - fs_in.FragPos);
     float lightDistance = length(lightPos - fs_in.FragPos);
-    float bias = max(0.005 * (1.0 - dot(normal, lightDir)) / lightDistance, 0.001);
-    // check whether current frag pos is in shadow
-    // float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
+    float bias = max(0.005 * (1.0 - dot(normal, lightDir)) / lightDistance, 0.005);
+
     // PCF
     float shadow = 0.0;
+    int kernelSize = 15; // Increased kernel size for more samples
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    for(int x = -1; x <= 1; ++x)
+    int sampleCount = kernelSize * kernelSize;
+    int halfKernelSize = kernelSize / 2;
+
+    for(int x = -halfKernelSize; x <= halfKernelSize; ++x)
     {
-        for(int y = -1; y <= 1; ++y)
+        for(int y = -halfKernelSize; y <= halfKernelSize; ++y)
         {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r; 
-            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            // Smooth falloff using smoothstep
+            float depthDifference = currentDepth - bias - pcfDepth;
+            float shadowFactor = smoothstep(0.0, 0.05, depthDifference); // Adjust the 0.0 and 0.05 values to control the smoothness
+            shadow += shadowFactor;
         }    
     }
-    shadow /= 9.0;
+    shadow /= float(sampleCount);
     
     // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
     if(projCoords.z > 1.0)

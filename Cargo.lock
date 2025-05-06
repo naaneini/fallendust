@@ -279,9 +279,9 @@ dependencies = [
 
 [[package]]
 name = "ferrousgl"
-version = "0.0.15"
+version = "0.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efb5a524759113d658c7858545116eda670b49a4b5a1a824b3e0e4f4632674ee"
+checksum = "25680980da4beeb3615ff8a5c7e6a224accd300ac732de58aee50050143679cc"
 dependencies = [
  "gl",
  "glam",
@@ -362,9 +362,9 @@ dependencies = [
 
 [[package]]
 name = "glam"
-version = "0.30.2"
+version = "0.30.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0e9b6647e9b41d3a5ef02964c6be01311a7f2472fea40595c635c6d046c259e"
+checksum = "6b46b9ca4690308844c644e7c634d68792467260e051c8543e0c7871662b3ba7"
 
 [[package]]
 name = "glfw"
