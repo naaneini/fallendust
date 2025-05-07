@@ -137,6 +137,10 @@ fn main() {
             window.set_rendering_type(ferrousgl::RenderingType::Wireframe);
         } else if window.is_key_pressed(WindowKey::F2) {
             window.set_rendering_type(ferrousgl::RenderingType::Solid);
+        } else if window.is_key_pressed(WindowKey::F3) {
+            terrain_manager.clear_chunks();
+        } else if window.is_key_pressed(WindowKey::F4) {
+            terrain_manager.enqueue_chunks_in_radius(IVec3::new(0,0,0), 16);
         }
 
         if window.is_mouse_button_pressed(glfw::MouseButton::Left) {
@@ -159,7 +163,7 @@ fn main() {
 
         // Light comes from above (higher Y value) but moves with camera
         let light_height = 10.0; // How high above the camera the light is
-        let light_offset = Vec3::new(0.0, light_height, 0.0); // Directly above
+        let light_offset = Vec3::new(10.0, light_height, 0.0); // Directly above
         let light_pos = camera_controller.position + light_offset;
 
         // Light points downward (toward camera position)
@@ -224,6 +228,7 @@ fn main() {
         terrain_manager.terrain_shader.set_uniform_texture("uRockTex", 2);
         terrain_manager.terrain_shader.set_uniform_texture("uRockNormal", 3);
         terrain_manager.terrain_shader.set_uniform_texture("shadowMap", 4);
+        //terrain_manager.terrain_shader
 
         for (_, chunk) in &terrain_manager.chunks {
             if chunk.is_empty {

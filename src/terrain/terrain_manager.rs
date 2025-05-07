@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::Path;
+use std::time::Instant;
 use ferrousgl::{texture, GlWindow, MipmapType, Shader, Texture};
 use glam::{IVec3, Mat4, Vec3, Vec4};
 use serde_json::de;
@@ -22,6 +23,7 @@ pub struct TerrainManager {
     last_chunk_position: IVec3,
     last_local_position: IVec3,
     chunks_to_remesh: HashSet<IVec3>,
+    chunk_generation_start_time: Option<Instant>,
 }
 
 impl TerrainManager {
@@ -56,6 +58,7 @@ impl TerrainManager {
             last_chunk_position: IVec3::new(0, 0, 0),
             last_local_position: IVec3::new(0, 0, 0),
             chunks_to_remesh: HashSet::new(),
+            chunk_generation_start_time: None,
         }
     }
 
@@ -96,8 +99,20 @@ impl TerrainManager {
         self.chunks.insert(position, chunk);
     }
 
+    pub fn clear_chunks(&mut self) {
+        self.chunks.clear();
+        self.chunk_generation_queue.clear();
+    }
+
+    pub fn force_generate_chunk(&mut self, position: IVec3) {
+        if !self.chunks.contains_key(&position) {
+            self.generate_chunk(position);
+        }
+    }
+
     pub fn enqueue_chunks_in_radius(&mut self, center: IVec3, render_distance: i32) {
         let mut positions_to_generate = Vec::new();
+        self.chunk_generation_queue.clear(); // Clear the queue before adding new positions
 
         for x in -render_distance as i32..=render_distance as i32 {
             for y in -render_distance as i32..=render_distance as i32 {
@@ -120,11 +135,21 @@ impl TerrainManager {
         for (_, position) in positions_to_generate {
             self.chunk_generation_queue.push_back(position);
         }
+        // Start the timer when the queue is populated
+        self.chunk_generation_start_time = Some(Instant::now());
     }
 
     pub fn process_chunk_generation(&mut self) {
         if let Some(position) = self.chunk_generation_queue.pop_front() {
             self.generate_chunk(position);
+        }
+
+        // Check if the queue is empty and stop the timer
+        if self.chunk_generation_queue.is_empty() {
+            if let Some(start_time) = self.chunk_generation_start_time.take() {
+                let duration = start_time.elapsed();
+                println!("Total time elapsed generating all chunks: {:?}", duration);
+            }
         }
     }
 

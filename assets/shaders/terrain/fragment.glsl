@@ -50,7 +50,7 @@ float ShadowCalculation(vec4 fragPosLightSpace)
             float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
             // Smooth falloff using smoothstep
             float depthDifference = currentDepth - bias - pcfDepth;
-            float shadowFactor = smoothstep(0.0, 0.05, depthDifference); // Adjust the 0.0 and 0.05 values to control the smoothness
+            float shadowFactor = smoothstep(0.0, 0.04, depthDifference); // Adjust the 0.0 and 0.05 values to control the smoothness
             shadow += shadowFactor;
         }    
     }

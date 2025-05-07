@@ -1,6 +1,7 @@
 use crate::terrain::marching_cubes::marching_cubes_data_tables::MarchingCubesDataTables;
 use crate::terrain::scalar::scalar_data::ScalarData;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::ThreadPoolBuilder;
 use std::{collections::HashMap, time::Instant};
 
 #[derive(Hash, Eq, PartialEq)]
@@ -15,6 +16,12 @@ impl MarchingCubesGenerator {
         isolevel: f32,
         lod: usize,
     ) -> (Vec<f32>, Vec<u32>) {
+        // Configure Rayon to use exactly 4 threads
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .expect("Failed to create thread pool");
+
         // LOD must be at least 1 (no skipping)
         let lod = lod.max(1);
         let grid_size = scalar_data.dimensions.x as usize;
@@ -28,13 +35,15 @@ impl MarchingCubesGenerator {
         let mut vertex_data: Vec<f32> = Vec::new(); // Interleaved [position, normal]
         let mut indices: Vec<u32> = Vec::new();
 
-        // Process slices in parallel
-        let slices: Vec<(usize, Vec<f32>, Vec<u32>)> = (1..grid_size - 2)
-            .into_par_iter()
-            .step_by(lod) // Skip slices based on LOD
-            .filter(|&x| x + lod < grid_size - 1) // Ensure overlap between slices
-            .map(|x| Self::process_slice(x, &data_tables, &scalar_data, isolevel, lod))
-            .collect();
+        // Process slices in parallel using our 4-thread pool
+        let slices: Vec<(usize, Vec<f32>, Vec<u32>)> = pool.install(|| {
+            (1..grid_size - 2)
+                .into_par_iter()
+                .step_by(lod) // Skip slices based on LOD
+                .filter(|&x| x + lod < grid_size - 1) // Ensure overlap between slices
+                .map(|x| Self::process_slice(x, &data_tables, &scalar_data, isolevel, lod))
+                .collect()
+        });
 
         // Merge results in order
         let mut vertex_offset = 0;

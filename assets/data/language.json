@@ -1,0 +1,53 @@
+{
+    "language": {
+        "commands": {
+            "success": "Command '{command}' executed successfully.",
+            "errors": {
+                "not_found": "Command '{command}' not found.",
+                "invalid_parameters": "Invalid parameters for command '{command}'.",
+                "parsing_failed": "Failed to parse command '{command}': {error}"
+            }
+        },
+        "assets": {
+            "info": {
+                "shader_compilation": "Compiling shader '{shader}'... This may take a moment."
+            },
+            "errors": {
+                "not_found": "Asset '{asset}' not found at expected location: {expected_path}",
+                "corrupted": "Asset '{asset}' is corrupted and cannot be loaded. Error: {error}"
+            }
+        },
+        "engine": {
+            "info": {
+                "performance_test_start": "Running hardware performance test to determine optimal settings...",
+                "performance_test_complete": "Performance test completed successfully."
+            },
+            "warnings": {
+                "high_system_usage": "Warning: High system resource usage detected. Consider lowering graphics settings."
+            },
+            "errors": {
+                "opengl_error": "OpenGL error occurred: {opengl_error}",
+                "opengl_fatal_error": "Fatal OpenGL error: {opengl_error}. Application will now exit."
+            },
+            "terrain": {
+                "loading": {
+                    "terrain": "Loading terrain..."
+                }
+            }
+        },
+        "network": {
+            "status": {
+                "connecting": "Connecting to server...",
+                "transferring_data": "Transferring data...",
+                "connected": "Successfully connected to server.",
+                "disconnected": "Disconnected from server."
+            },
+            "errors": {
+                "connection_failed": "Failed to connect to server: {error}",
+                "connection_lost": "Connection to server lost.",
+                "timeout": "Connection timed out.",
+                "rejected": "Server rejected connection: {reason}"
+            }
+        }
+    }
+}
