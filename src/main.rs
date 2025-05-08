@@ -17,7 +17,7 @@ fn main() {
         title: "Fallendust".to_string(),
         width: 1080,
         height: 720,
-        target_framerate: 144,
+        target_framerate: 1444,
         anti_aliasing: 4,
         ..Default::default()
     });
@@ -38,7 +38,7 @@ fn main() {
         Path::new("./assets/shaders/shadows/fragment.glsl"),
     ).unwrap();
 
-    let mut depth_texture = RenderTexture::new(8192, 8192, true).unwrap();
+    let mut depth_texture = RenderTexture::new(2048, 2048, true).unwrap();
     depth_texture.texture().bind(0);
     depth_texture.set_mipmap_type(MipmapType::Nearest);
 

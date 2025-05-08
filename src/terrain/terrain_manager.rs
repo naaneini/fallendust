@@ -230,7 +230,7 @@ impl TerrainManager {
                     // Clamp delta to ensure it's not negative
                     delta = delta.max(0.0);
     
-                    self.place_voxel(pos, delta);
+                    self.place_voxel(pos, -delta);
                 }
             }
         }
